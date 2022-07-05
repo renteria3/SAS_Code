@@ -1,0 +1,195 @@
+#ECO520 Homework 8
+
+# Adding some functions to use for analysis from server
+source("/var/www/html/jlee141/econdata/R/func_lib.R")
+
+# Read Data from bigblue server 
+gse <- read.csv("/var/www/html/jlee141/econdata/fannie_mae/Fannie_Mort_NY_2007.csv")
+str(gse)
+
+# Create indata without some unnecessary columns 
+indata <- subset(gse,select=-c(fstimebuyer,state,orgyear))
+
+# Change the zip code to a categorical variable
+indata$zip_3 <- as.factor(indata$zip_3)
+str(indata)
+
+#1) Split the data into train and test data
+set.seed(1403278)
+train_idx <- sample(nrow(indata),round(.8*nrow(indata)))
+train <- indata[train_idx,]
+test  <- indata[-train_idx,]
+testy <- test$delinq
+
+#2)	Use the training data set to estimate all models and compare the performance 
+# using test data by the Receiver Operating Characteristic (ROC) and 
+# Area Under Curve (AUC)
+
+
+#Linear Probability Model
+
+lm0 <- lm(delinq~cscore_b + dti + zip_3 + purpose, data=train)
+summary(lm0)
+print(lm0)
+yhat0 <- predict(lm0,newdata=test)
+head(yhat0)
+conf_table(yhat0,testy,"LPM")
+auc_plot(yhat0,testy,"LPM")
+
+lm1 <- lm(delinq~ . , data=train)
+summary(lm1)
+print(lm1)
+yhat1 <- predict(lm1,newdata=test)
+head(yhat1)
+conf_table(yhat1,testy,"LPM")
+auc_plot(yhat1,testy,"LPM")
+
+lm2 <- step(lm(delinq~ . , data=train), direction="both")
+summary(lm2)
+print(lm2)
+yhat2 <- predict(lm2,newdata=test)
+head(yhat2)
+conf_table(yhat2,testy,"LPM")
+auc_plot(yhat2,testy,"LPM")
+
+#Logistic Model
+
+logit0 <- glm(formula=delinq~cscore_b + dti + zip_3 + purpose,data=train,
+              family=binomial(link=logit))
+summary(logit0)
+loghat0 <- predict(logit0,newdata=test, type="response")
+conf_table(loghat0,testy,"LOGIT")
+auc_plot(loghat0,testy,"LOGIT")
+
+logit1 <- glm(formula=delinq ~ . ,data=train,family=binomial(link=logit))
+summary(logit1)
+loghat1 <- predict(logit1,newdata=test, type="response")
+conf_table(loghat1,testy,"LOGIT")
+auc_plot(loghat1,testy,"LOGIT")
+
+logit2 <- step(glm(formula=delinq ~ . ,data=train,family=binomial(link=logit)))
+summary(logit2)
+loghat2 <- predict(logit2,newdata=test, type="response")
+conf_table(loghat2,testy,"LOGIT")
+auc_plot(loghat2,testy,"LOGIT")
+
+# Put all graphs together to compare them
+par(mfrow=c(2,3))
+auc_plot(yhat0,testy,"LPM")
+auc_plot(yhat1,testy,"LPM")
+auc_plot(yhat2,testy,"LPM")
+auc_plot(loghat0,testy,"LOGIT")
+auc_plot(loghat1,testy,"LOGIT")
+auc_plot(loghat2,testy,"LOGIT")
+
+# Final Decision
+dec_lpm <- ifelse(yhat1> 0.2, 1 ,0)
+dec_logit <- ifelse(loghat2> 0.2, 1 ,0)
+
+table(testy,dec_lpm)
+table(testy,dec_logit)
+
+#Random Forest Model
+
+indata$delinq <- as.factor(indata$delinq)
+seed(1403278)
+train2_idx <- sample(nrow(indata),round(.15*nrow(indata)))
+train2 <- indata[train2_idx,]
+test2  <- indata[-train2_idx,]
+testy2 <- test2$delinq
+
+rf1 <- randomForest(formula=delinq~ . ,data=train2,mtry=5,ntree=1000)
+summary(rf1)
+rfhat1 <- predict(rf1,newdata=test2, type="prob")
+rfhat1 <-
+  rfhat1[,2]
+conf_table(rfhat1,testy2,"RANDFOREST")
+auc_plot(rfhat1,testy2,"RANDOMFOREST")
+
+# Find the best mtry
+
+oob.values <- vector(length=12)
+for(i in 1:12) {
+  temp.model <- randomForest(formula=delinq~.,data=train2,mtry=i,ntree=500)
+  oob.values[i] <- temp.model$err.rate[nrow(temp.model$err.rate),1]
+}
+cbind(1:12,oob.values)
+
+# Found that the best mtry is 2
+par(mfrow=c(1,1))
+
+#Find the bestntree
+rf_tree <- randomForest(formula=delinq~.,data=train2,mtry=2,ntree=1000)
+Trees <- rep(1:nrow(rf_tree$err.rate))
+Error.rate <- rf_tree$err.rate[,"OOB"]
+plot(Trees,Error.rate,col="red")
+
+rf2 <- randomForest(formula=delinq~ . ,data=train2,mtry=2,ntree=550)
+summary(rf2)
+rfhat2 <- predict(rf2,newdata=test2, type="prob")
+rfhat2 <- rfhat2[,2]
+conf_table(rfhat2,testy2,"RANDFOREST")
+auc_plot(rfhat2,testy2,"RANDOMFOREST")
+
+rf3 <- randomForest(formula=delinq~ . ,data=train2,mtry=2,ntree=1000)
+summary(rf3)
+rfhat3 <- predict(rf3,newdata=test2, type="prob")
+rfhat3 <- rfhat3[,2]
+conf_table(rfhat3,testy2,"RANDFOREST")
+auc_plot(rfhat3,testy2,"RANDOMFOREST")
+
+rf4 <- randomForest(formula=delinq~ . ,data=train2,mtry=2,ntree=600)
+summary(rf4)
+rfhat4 <- predict(rf4,newdata=test2, type="prob")
+rfhat4 <- rfhat4[,2]
+conf_table(rfhat4,testy2,"RANDFOREST")
+auc_plot(rfhat4,testy2,"RANDOMFOREST")
+
+
+rf5 <- randomForest(formula=delinq~ . ,data=train2,mtry=2,ntree=800)
+summary(rf5)
+rfhat5 <- predict(rf5,newdata=test2, type="prob")
+rfhat5 <- rfhat5[,2]
+conf_table(rfhat5,testy2,"RANDFOREST")
+auc_plot(rfhat5,testy2,"RANDOMFOREST")
+
+rf6 <- randomForest(formula=delinq~ . ,data=train2,mtry=2,ntree=900)
+summary(rf6)
+rfhat6 <- predict(rf6,newdata=test2, type="prob")
+rfhat6 <- rfhat6[,2]
+conf_table(rfhat6,testy2,"RANDFOREST")
+auc_plot(rfhat6,testy2,"RANDOMFOREST")
+
+par(mfrow=c(3,2))
+auc_plot(rfhat1,testy2,"RANDOMFOREST mtry=5 ntree=1000")
+auc_plot(rfhat2,testy2,"RANDOMFOREST mtry=2 ntree=550")
+auc_plot(rfhat3,testy2,"RANDOMFOREST mtry=2 ntree=1000")
+auc_plot(rfhat4,testy2,"RANDOMFOREST mtry=2 ntree=600")
+auc_plot(rfhat5,testy2,"RANDOMFOREST mtry=2 ntree=800")
+auc_plot(rfhat6,testy2,"RANDOMFOREST mtry=2 ntree=900")
+
+# The best Random Forest Model is model 3 with 1000 trees.
+# For Model 3, at 0.2 prob the total true amount would be 7107 with 5291 true positive
+# and 1816 false negative cases meaning that the detection rate is 74.45%. In turn
+# total false amount would be 32742 with 9831 false positive and 22911 true negative
+# cases bring the false positive rate to 30.03%.
+
+#3)	Using your best model , explain the performance of the model using confusion matrix.
+
+par(mfrow=c(2,2))
+auc_plot(yhat1,testy,"LPM")
+auc_plot(loghat1,testy,"LOGIT")
+auc_plot(rfhat3,testy2,"RANDOMFOREST mtry=2 ntree=1000")
+
+# Best model is loghat1.
+# For Model 3, at 0.2 prob the total true amount would be 1697 with 1191 true positive
+# and 506 false negative cases meaning that the detection rate is 70.18%. In turn
+# total false amount would be 7679 with 1930 false positive and 5749 true negative
+# cases bring the false positive rate to 25.13%.
+
+
+#4)	Save the best model in terms of AUC and submit the algorithm to bigblue server.
+# where best_model is your model name, and yourname must be without space. 
+# If you use your own machine, add this file with your submission in D2L. 
+
+saveRDS(logit1,"/home/eco520/HW8/hw8_JesseRenteriaIII.rds")

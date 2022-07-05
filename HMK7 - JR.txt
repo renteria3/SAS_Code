@@ -1,0 +1,232 @@
+# ECO520 First R Pactice
+
+# 1. R as a calculator
+12+34
+12^2
+1*2*3*4
+log(100)
+12^3
+
+#2. Define a number to a variable
+a <-10
+b <-20  
+a+b
+a*b
+c <- "Hi ECO520"
+a+b+c
+d<-substr(c,4,10)
+d
+
+#3. Data Type
+#3.1 Vector - store one dimension
+v1 <- c(1L,2L,3L,4L,5L)
+v2 <- c(TRUE, FALSE, FALSE, FALSE, TRUE)
+v3 <- c(12.3,21.5,34.2,33.55,34.0)
+v4 <- c("A","B","C","D","E")
+v5 <- c(1L,TRUE,12.3,"A",1) #Vector needs to be one type variable
+
+#3.2 Matrix - Two dimension
+m1 <- matrix(1:15,5,3)
+m2 <- cbind(v1,v2,v3,v4,v5)
+colnames(m2) <- c("A","B","C","D","E")
+rownames(m2) <- c("ob1","ob2","ob3","ob4","ob5")
+m3 <- rbind(v1,v2,v3,v4,v5)
+
+#3.3 Array - More than two dimension
+a1 <- array(c(1:16),dim=c(4,4,2,2))
+
+#3.4 List - Any data type
+l1 <- list(v1,v2,v3,v4,v5)
+
+#3.5 Data Frame <- Two dimension
+dat1 <- data.frame(v1,v2,v3,v4,v5)
+str(dat1)
+
+#4. data.frame Operation
+#4.1 Create New Variables
+
+dat1$v6 <- dat1$v1^2 #v6 = v1^2
+names(dat1)[6] <- "square of v1"
+
+#dummy variable
+dat1$cat1 <- ifelse(dat1$v3 > 30, 1, 0)
+dat1$cat2 <- ifelse(dat1$v2 == TRUE, 1, 0)
+
+dat1$cat3 <- 0
+dat1$cat3[v3 <20] <- 1
+dat1$cat3[v3 >= 20 & v3 < 30] <- 2
+dat1$cat3[v3 >= 30] <- 3
+
+#Creating subset of Data
+dat2 <- dat1[c("v1","v2")]
+dat3 <- dat1[1:3,]
+dat4 <- dat1[,1:3]
+dat5 <- dat1[which(v2==TRUE)]
+dat9 <- subset(dat1,v3 >= 20,select=c(cat1:cat3))
+dat9 <- subset(dat1,select=c(cat1:cat3))
+dat9 <- subset(dat1,select=-c(cat1:cat3))
+
+#4.3 Random Sampling
+set.seed(1234)
+indata <- dat1
+train_ind <- sample(nrow(indata),round(0.6*nrow(indata)))
+train <- indata[train_ind,]
+test <- indata[-train_ind,]
+
+#5. Working with CSV file
+# Use when at home cca <- read.csv(https://bigblue.depaul.edu/jlee141/econdata/eco520/chicago_cca.csv)
+cca <- read.csv("/var/www/html/jlee141/econdata/eco520/chicago_cca.csv")
+str(cca)
+head(cca)
+tail(cca)
+
+cca$bclass <- 2
+cca$bclass[cca$Black > .5] <-3
+cca$bclass[cca$Black < .2] <-1
+table(cca$bclass)
+
+# 6. Descriptive Stat
+summary(cca)
+summary(cca$Black)
+table(cca$bclass)
+
+# 6.1 Description by Variable
+attach(cca)
+tapply(Income,bclass,mean)
+tapply(Income,bclass,median)
+
+#6.2 Graphs in R
+hist(Income, col="skyblue",main="ECO520 Graph")
+counts <- table(bclass)
+barplot(counts,main="Number of CA by bclass", col="skyblue")
+
+plot(Unemp,Income, main="Scatter Unemployment vs. Income", col="red")
+abline(lm(Income~Unemp,col="blue"))
+
+#7. Linear Regression Model
+#7.1 Regression 
+ols1 <- lm(Income ~ Unemp, data=cca)
+summary(ols1)
+
+#7.2 Regression with Category Variable
+cca$bclass <- as.factor(cca$bclass)
+ols2 <- lm(Income ~ Unemp + bclass, data=cca)
+summary(ols2)
+
+#7.3 Multiple Regression 
+ols3 <- lm(Income ~ Unemp + Black + Hispanic, data=cca)
+summary(ols3)
+
+#7.4 Stepwise
+ols4 <- step(lm(Income ~ Unemp + Black + Hispanic, data=cca),direction="both")
+summary(ols4)
+ols5 <- step(lm(Income ~ Unemp + Black + Hispanic, data=cca),direction="backward")
+summary(ols5)
+
+#7.5 Sampling to Train and Test Data
+set.seed(1234)
+train_ind <- sample(nrow(cca), round(0.7*nrow(cca)))
+train <- cca[train_ind,]
+test <- cca[-train_ind,]
+
+tols3 <- lm(Income ~ Unemp + Black + Hispanic, data=train)
+tols4 <- step(lm(Income ~ Unemp + Black + Hispanic, data=train),direction="both")
+
+py3 <- predict(tols3,newdata=test)
+py4 <- predict(tols4,newdata=test)
+pe3 <- residuals(tols3,newdata=test)
+pe4 <- residuals(tols4,newdata=test)
+
+mse3 <- mean(pe3^2)
+mse4 <- mean(pe4^2)
+rmse3 <-mse3^0.5
+rmse4 <-mse4^0.5
+
+print(c(rmse3,rmse4))
+
+# MLS 2020 Chicago House Price in R
+# if you use bigblue server, use the following code
+house1 <- read.csv("/var/www/html/jlee141/econdata/housing/mls2020_sample.csv")
+
+# Convert to Category variable and Create new variable
+house1$ZIP       <- as.factor(house1$ZIP)
+house1$sold      <- as.logical(house1$SOLD_30DAY)
+house1$AGESQ <- (house1$AGEBLD^2)
+
+#1 Descriptive Analytics in R 
+#1a. Show the summary statistics of all variables, and investigate any missing or outliers. 
+summary(house1)
+head(house1)
+tail(house1)
+str(house1)
+is.na(house1)
+#1b. Make the histograms of the log of house price, the age of building, and the square feet. 
+attach(house1)
+hist(LOG_PRICE, col="skyblue")
+hist(AGEBLD, col="skyblue")
+hist(SQFT, col="skyblue")
+
+#1c. Create scatter plots between the log of house price vs. the log of square feet. 
+# Add linear regression line of the scatter plot. 
+
+plot(LOG_SQFT,LOG_PRICE, main="Scatter Log of House Price vs. Log of Square Feet", col="red")
+abline(lm(LOG_PRICE~LOG_SQFT,col="blue"))
+
+#1d. Find the median price by the bedroom size and the mean price by the zip code
+
+tapply(HPRICE,BEDROOM,median)
+tapply(HPRICE,ZIP,mean)
+
+#2 Split the data into 75% of train and 25% of test data set. Modify the 
+# following code and use your student id number as the seed number. 
+
+# Train and Test Data
+set.seed(1403278)
+train_ind <- sample(nrow(house1),round(0.75*nrow(house1)))
+train     <- house1[train_ind,]
+test      <- house1[-train_ind,]
+
+#3) let’s consider the following regression models, use the train data set to 
+# estimate the model, and compare the performance in terms of the root mean square 
+# of error (RMSE) on the test data. Which one gives the best performance? 
+  
+#Model1 : LOG_PRICE= b0 + b1 LOG_SQFT + e
+#Model2 : LOG_PRICE= b0 + b1 LOG_SQFT + b2 BEDROOM + b3 BATHROOM + e
+#Model3 : LOG_PRICE= b0 + b1 LOG_SQFT + b2 BEDROOM + b3 BATHROOM               
+# + b4 GARAGE+ b5 FIREPLACE+ b6 AGEBLD + b7 SOLD_30DAY + e
+#Model4 : Model 3 with stepwise and direction = both  
+
+
+tmodel1 <- lm(LOG_PRICE ~ LOG_SQFT, data=train)
+summary(tmodel1)
+tmodel2 <- lm(LOG_PRICE ~ LOG_SQFT + BEDROOM + BATHROOM, data=train)
+summary(tmodel2)
+tmodel3 <- lm(LOG_PRICE ~ LOG_SQFT + BEDROOM + BATHROOM + GARAGE + FIREPLACE + 
+              AGEBLD + SOLD_30DAY, data=train)
+summary(tmodel3)
+tmodel4 <- step(lm(LOG_PRICE ~ LOG_SQFT + BEDROOM + BATHROOM + GARAGE + FIREPLACE + 
+              AGEBLD + SOLD_30DAY, data=train),direction="both")
+summary(tmodel4)
+
+py1 <- predict(tmodel1,newdata=test)
+py2 <- predict(tmodel2,newdata=test)
+py3 <- predict(tmodel3,newdata=test)
+py4 <- predict(tmodel4,newdata=test)
+pe1 <- residuals(tmodel1,newdata=test)
+pe2 <- residuals(tmodel2,newdata=test)
+pe3 <- residuals(tmodel3,newdata=test)
+pe4 <- residuals(tmodel4,newdata=test)
+
+mse1 <- mean(pe1^2)
+mse2 <- mean(pe2^2)
+mse3 <- mean(pe3^2)
+mse4 <- mean(pe4^2)
+rmse1 <-mse1^0.5
+rmse2 <-mse2^0.5
+rmse3 <-mse3^0.5
+rmse4 <-mse4^0.5
+
+print(c(rmse1,rmse2,rmse3,rmse4))
+
+#Model 3 has the best performance.
+  

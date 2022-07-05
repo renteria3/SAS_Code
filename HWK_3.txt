@@ -1,0 +1,126 @@
+/* Read Data from bigblue */
+filename webdat url 
+    "http://bigblue.depaul.edu/jlee141/econdata/eco520/online_retail.csv" ;
+PROC IMPORT DATAFILE= webdat OUT= online_retail
+     DBMS=CSV REPLACE;
+RUN;
+
+/* Create your own random sample data. Make sure type your student ID as seed number 
+Replace your_depaul_id with your student id (only numbers)      */
+proc surveyselect data=online_retail method=srs seed = 1403278
+     n = 5000 out=mysales ;
+run;
+
+/* Create some additional variables for SQL */
+data sqldata  ; set mysales ; 
+   date = datepart(Invoicedate) ;
+   yearmm = year(date)*100+month(date) ;
+   totalsale = UnitPrice*Quantity ;
+   logtotal = log(totalsale) ; 
+   month = month(date) ;
+   quarter = qtr(date) ; 
+   itemID = 1*substr(StockCode,1,4) ;
+   if itemID = . then delete ;
+   l_date = '31DEC2011'D ;
+   format date l_date mmddyy10.     ;
+   if country = "United Kingdom" then UK = 1 ; else UK = 0 ;
+   if totalsale = . then delete  ;
+ run ;
+proc means ; run ; 
+
+/*Creating the Customer summary table by applying proc sql query */
+PROC SQL;
+Create table Customer_summary as
+   select distinct CustomerID,
+       max(Date) as Recent_date format = date9.,
+       (l_Date - max(Date)) as Recency ,
+       count(InvoiceDate) as Frequency,
+       log(Sum(totalsale)) as Monetary format=dollar15.2
+   from sqldata 
+   group by CustomerID;
+quit;
+proc means data=Customer_summary ; run ;
+
+/* 1.1 Find potential issues on outliers or problem of the data  (remove only extreme outliers if necessary) */
+/* 1.2 Show the best number of clusters using the various settings of clusters */
+/* 1.3 Estimate one hierarchical Model and one K-Means Model, and compare the differences */
+/* 1.4 Choose one cluster model and explain the different clusters using the scatterplot graphs. */
+/* 1.5 Name each group using the summary statistics according to recency, frequency, and monetary. */
+
+/* 1. HIEARARCHICAL MODEL */
+PROC CLUSTER DATA=Customer_summary OUT=CLSMYSALES METHOD=WARD CCC PSEUDO PRINT=7 ;
+	VAR RECENCY FREQUENCY MONETARY ; copy CUSTOMERID ; RUN ; 
+PROC PRINT DATA=CLSMYSALES ; RUN ;
+
+DATA CLSMYSALES ; SET CLSMYSALES ;
+	IF FREQUENCY > 250 THEN DELETE ;RUN ;
+
+PROC TREE DATA=CLSMYSALES OUT=TREESALES NCL=3;
+	COPY CUSTOMERID RECENCY FREQUENCY MONETARY ; RUN ;
+PROC PRINT DATA=TREESALES ; RUN ;
+
+TITLE "CUSTOMER SUMMARY - HIERARCHICAL MODEL" ;
+PROC SGPLOT DATA=TREESALES;
+	SCATTER X=RECENCY Y=FREQUENCY / GROUP=CLUSTER  ; RUN ;
+PROC SGPLOT DATA=TREESALES;
+	SCATTER X=RECENCY Y=MONETARY / GROUP=CLUSTER  ; RUN ;
+	
+/* 1. K-MEANS MODEL */
+DATA Customer_summary ; SET Customer_summary ;
+	IF FREQUENCY > 250 THEN DELETE ; RUN ;
+PROC FASTCLUS DATA=Customer_summary MAXCLUSTERS=3 OUT=KMEANSALES ;
+	VAR RECENCY FREQUENCY MONETARY ; RUN ;
+
+TITLE "CUSTOMER SUMMARY - K-MEANS MODEL" ;
+PROC SGPLOT DATA=KMEANSALES ;
+	SCATTER X=RECENCY Y=FREQUENCY / GROUP=CLUSTER ; RUN ;
+PROC SGPLOT DATA=KMEANSALES ;
+	SCATTER X=RECENCY Y=MONETARY / GROUP=CLUSTER ; RUN ;
+/* I LIKE 3 INSTEAD OF 5. IT LOOKS BETTER.  */
+
+ 
+ /*Creating the item_summary table by applying proc sql query */
+PROC SQL;
+Create table item_summary as
+   select distinct itemID,
+       mean(l_Date - (Date)) as Recency ,
+       count(InvoiceDate) as Frequency,
+       log(Sum(totalsale)) as Monetary format=f5.2
+   from sqldata 
+   group by itemID;
+quit;
+
+/* 2.1 Find potential issues on outliers or problem of the data (remove only extreme outliers if necessary) */
+/* 2.2 Show the best number of clusters using the various settings of clusters */
+/* 2.3 Estimate One hierarchical Model and K-Means Model and compare the differences */
+/* 2.4 Choose one cluster model and explain the different clusters using the scatterplot graphs. */
+/* 2.5 Name each group for the cluster model using the summary statistics according to recency, frequency, and monetary. */
+
+/* 2. HIEARARCHICAL MODEL */
+PROC CLUSTER DATA=item_summary OUT=ITEM_MYSALES METHOD=WARD CCC PSEUDO PRINT=7 ;
+	VAR RECENCY FREQUENCY MONETARY ; copy ITEMID ; RUN ; 
+PROC PRINT DATA=ITEM_MYSALES ; RUN ;
+
+PROC TREE DATA=ITEM_MYSALES OUT=TREE_ITEM NCL=3;
+	COPY ITEMID RECENCY FREQUENCY MONETARY ; RUN ;
+PROC PRINT DATA=TREE_ITEM ; RUN ;
+
+TITLE "ITEM SUMMARY - HIERARCHICAL MODEL" ;
+PROC SGPLOT DATA=TREE_ITEM;
+	SCATTER X=RECENCY Y=FREQUENCY / GROUP=CLUSTER  ; 
+	REG X=RECENCY Y=FREQUENCY / GROUP=CLUSTER ; RUN ;
+PROC SGPLOT DATA=TREE_ITEM;
+	SCATTER X=RECENCY Y=MONETARY / GROUP=CLUSTER  ; 
+	REG X=RECENCY Y=MONETARY / GROUP=CLUSTER ; RUN ;
+
+/* 2. K-MEANS MODEL */
+PROC FASTCLUS DATA=item_summary MAXCLUSTERS=3 OUT=KMEAN_ITEM ;
+	VAR RECENCY FREQUENCY MONETARY ; RUN ;
+TITLE "ITEM SUMMARY - K-MEANS MODEL" ;
+PROC SGPLOT DATA=KMEAN_ITEM ;
+	SCATTER X=RECENCY Y=FREQUENCY / GROUP=CLUSTER ; 
+	REG X=RECENCY Y=FREQUENCY / GROUP=CLUSTER ; RUN ;
+PROC SGPLOT DATA=KMEAN_ITEM ;
+	SCATTER X=RECENCY Y=MONETARY / GROUP=CLUSTER ; 
+	REG X=RECENCY Y=MONETARY / GROUP=CLUSTER ; RUN ;
+/* I LIKE 3 INSTEAD OF 4 BETTER */

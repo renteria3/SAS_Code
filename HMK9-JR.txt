@@ -1,0 +1,107 @@
+#R code in bigblue: 
+source("/var/www/html/jlee141/econdata/R/func_lib.R")
+gse <- read.csv("/var/www/html/jlee141/econdata/fannie_mae/Fannie_Mort_IL_2007.csv")
+str(gse)
+
+indata <- subset(gse,select=-c(fstimebuyer,state,orgyear,zip_3,relo_flg))
+str(indata)
+
+# Convert any factor variable to numeric variable 
+# if necessary, you can create multiple dummy variables for multiple categories
+# Simple conversion of a factor variable using ifelse
+indata$purpose  <- ifelse(indata$purpose == "P",1,0)
+indata$occ_stat <- ifelse(indata$occ_stat == "P",1,0)
+str(indata)
+
+# Neural Network Analysis requires to normalize the data 
+zindata <- min_max_nor(indata)
+
+# Split the data into train and test data
+set.seed(1403278)
+train_idx <- sample(nrow(indata),round(.8*nrow(indata)))
+ztrain    <- zindata[train_idx,]
+ztest     <- zindata[-train_idx,]
+testy     <- ztest$delinq
+
+# The dependent variable needs to be a factor to be a classification 
+ztrain$delinq <- as.factor(ztrain$delinq)
+
+# Now estimate the neural network models and make predictions
+library(neuralnet)
+
+# Your code to estimate the neural network models from here
+# Be patience since the neural network needs much longer computational time
+# Your grade will be also based on the performance of the model (ROC and AUC)
+
+#Basic Instruction
+#•	Make 80% as training set and 20% as test set using your DePaul id as a seed. 
+#•	Use the training data set to estimate all models.
+#•	Use the test data set, and perform the out of sample predictions 
+#•	Create a plot of ROC and AUC from each model. 
+
+#1)	Estimate the following  neural network models with different hidden layers.  
+# 1a.	hidden=c(5)
+nnet1 <- neuralnet(delinq~.,data=ztrain,linear.output = FALSE,hidden=c(5))
+plot(nnet1)
+pred1 <- predict(nnet1,ztest)
+pred1 <- pred1[,2]
+conf_table(pred1,testy,"NeuralNet1")
+auc_plot(pred1,testy,"NeuralNet1")
+
+# 1b.	hidden=c(5,2)
+nnet2 <- neuralnet(delinq~.,data=ztrain,linear.output = FALSE,hidden=c(3,2), 
+                   stepmax = 1e+07)
+plot(nnet2)
+pred2 <- predict(nnet2,ztest)
+pred2 <- pred2[,2]
+conf_table(pred2,testy,"NeuralNet2")
+auc_plot(pred2,testy,"NeuralNet2")
+
+# I tried running c(7,3), c(4,2), & c(4,3) but none of the three produced results.
+# I let the program run for 8-24 hours and received no results.
+
+# 1c.	hidden=c(7,3)
+nnet3 <- neuralnet(delinq~.,data=ztrain,linear.output = FALSE,hidden=c(4,2), 
+                   stepmax = 1e+07)
+plot(nnet3)
+pred3 <- predict(nnet3,ztest)
+pred3 <- pred3[,2]
+conf_table(pred3,testy,"NeuralNet3")
+
+# 1d.	your own choice of hidden layer that can beat above models 
+nnet4 <- neuralnet(delinq~.,data=ztrain,linear.output = FALSE,hidden=c(4,3))
+plot(nnet4)
+pred4 <- predict(nnet4,ztest)
+pred4 <- pred4[,2]
+conf_table(pred4,testy,"NeuralNet4")
+
+
+#COMPARSION
+conf_table(pred1,testy,"NeuralNet1")
+conf_table(pred2,testy,"NeuralNet2")
+
+auc_plot(pred1,testy,"NeuralNet1")
+auc_plot(pred2,testy,"NeuralNet2")
+
+#Best Model is NeuralNet1.
+
+#2)	Find the best performing model from 1), and answer the following questions. 
+# Suppose you setup a rule that if a person’s predicted probability is higher 
+# than 30%, then you classified the person as a possible case of delinquency. 
+# Create the confusion table and answer the following questions. According to 
+# the test data, 
+
+# 2a.	what is the probability that the model predicted correctly among the 
+# persons who were delinquent the mortgage loans?
+# 0.7309
+
+# 2b.	what is the probability that the model predicted correctly among the 
+# persons who were not delinquent the mortgage loans?
+# 0.7430
+
+# 2c.	what is the probability that the model makes false positive?
+# 0.257
+
+# 2d.	what is the probability that the model makes false negative?
+# 0.2691
+  

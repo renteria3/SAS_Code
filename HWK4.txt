@@ -1,0 +1,42 @@
+/****************************************************************************
+ Example American Community Survey (ACS) data by State                     */
+Filename webdata url "http://bigblue.depaul.edu/jlee141/econdata/eco520/acs_state_2014.csv";
+proc import datafile=webdata out= acs_2014 dbms=csv replace ; run ;
+
+/* Create a new variable */ 
+
+title 'ACS by State in 2014';
+proc contents data= acs_2014  ; run ;
+
+/*1) Find the correlation coefficient and covariance between X and Y.*/
+
+PROC CORR DATA=ACS_2014 COV ;
+	VAR MHPRICE MHINCOME ;
+	RUN ;
+
+/*2) Scatter plot between X and Y with regression line*/
+PROC SGPLOT DATA=ACS_2014;
+	SCATTER X=MHINCOME Y=MHPRICE ; 
+	REG X=MHINCOME Y=MHPRICE ; RUN ;
+
+/*3) Perform regression analysis using the following code:*/
+
+proc reg data=acs_2014 ;
+      model mhprice = mhincome ; 
+run ;
+
+/*4) Using SAS code save the predicted value of median house price from above model and 
+called “yhat1” and save the residuals called “res1”. Scatter plot between Y and yhat1, 
+and between X and res1.  Explain what you found from the plots.*/ 
+proc reg data=acs_2014 ;
+      model mhprice = mhincome ; 
+	Output out=regout predicted=yhat residual=res1 ;
+     run ;
+
+/*2. Multiple Regression Model*/
+/*1) Estimate a multiple regression model using the following code:*/
+
+proc reg data=acs_2014 ;
+     model mhprice = mhincome mgrent pop_white pop_black edu_ba_more     
+     lab_unemp / VIF    ;
+     run ; 

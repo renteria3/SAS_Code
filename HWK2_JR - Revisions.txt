@@ -1,0 +1,146 @@
+/* Read Data from bigblue */
+filename webdat url 
+    "http://bigblue.depaul.edu/jlee141/econdata/eco520/online_retail.csv" ;
+PROC IMPORT DATAFILE= webdat OUT= online_retail
+     DBMS=CSV REPLACE;
+RUN;
+
+/* Create your own random sample data. Make sure type your student ID as seed number 
+          Replace your_depaul_id with your student id (only numbers)      */
+proc surveyselect data=online_retail method=srs seed = 1403278
+     n = 2000 out=mysales ;
+run;
+
+data mysales  ; set mysales ; 
+   date = datepart(Invoicedate) ;       /* Create Date variables */
+   quarter = qtr(date) ;                /* Quarter of Transaction */
+   sales = UnitPrice*Quantity ;         /* Amount of Sales of each Invoice */    
+   itemID = 1*substr(StockCode,1,4) ;   /* Generate product ID using the first 4 digit */
+   if itemID = . then delete ;          /* Delete if itemID is missing */ 
+   if country = "United Kingdom" then UK = 1 ; else UK = 0 ; /* UK dummy Variable */
+   if sales = . then delete  ;          /* Delete if sales is missing */
+run ;
+
+/* 1.1. What are the total sales and total quantity patterns by the following variables 
+using descriptive analytics and graphs in SAS. - Product Item (itermID) */
+
+proc sort data=mysales out=mysales1 ; 
+	by descending itemID ;
+	run ; 
+proc summary data=mysales1 print n sum mean median stddev min max skewness kurt;
+	var sales quantity ; class itemID ; 
+	run ;
+proc sgplot data=mysales1 ; 
+	scatter y=sales x=quantity ; 
+	run ;
+
+/* 1.2. What are the total sales and total quantity patterns by the following variables 
+using descriptive analytics and graphs in SAS. - US vs Non UK */
+
+proc summary data=mysales print n sum mean median stddev min max skewness kurt ;
+	var sales quantity ; class UK ; 
+	run ;
+proc sort data=mysales out=mysales2 ; 
+	by UK ;
+	run ; 
+proc sgplot data=mysales2 ; by UK ;
+	scatter y=sales x=quantity ; 
+	run ;
+
+/* 2.1. Using proc summary: Who are the most five valuable customers to the business in terms of 
+	quantity or sales amount? */
+
+proc summary print n mean median sum; 
+	var quantity ; 
+	class customerID ; 
+	output out=customerID_quantity mean=quantity_mean ;
+	run ;
+proc sort data=customerID_quantity ; by descending quantity_mean ; run ;
+proc print data=customerID_quantity(obs=5) ; run ; 
+
+proc summary data=mysales print n mean median sum ; var sales ; 
+	class customerID ; 
+	output out=customerID_sales mean=sales_mean ;
+	run ;
+proc sort data=customerID_sales; by descending sales_mean ; run ;
+proc print data=customerID_sales(obs=5) ; run ; 
+ 
+
+/* 2.2. Using proc summary: Who are the most five valuable countries who purchase most in 
+terms of quantity or total sales amount? */
+
+proc summary data=mysales print n mean median sum; 
+	var quantity; 
+	class country; 
+	output out=country_quantity mean=quantity_mean2 ;
+	run ;
+proc sort data=country_quantity ; by descending quantity_mean2 ; run ;
+proc print data=country_quantity(obs=5) ; run ; 
+
+
+proc summary data=mysales print n mean median sum; 
+	var sales ; 
+	class country ; 
+	output out=country_sales mean=sales_mean2;
+	run ;
+proc sort data=country_sales; by descending sales_mean2 ; run ;
+proc print data=country_sales(obs=5) ; run ; 
+
+/* 3.1. Using the univariate and graph command in SAS, find the outliers of the 
+quantity and sales by the invoice ID.  Carefully explain what to do the outliers. */
+
+proc sort data=mysales out=mysales8 ;
+	by invoiceno ;
+	run ; 
+
+proc univariate data=mysales8 ; by invoiceno ; 
+	var quantity ; 
+	run ;
+proc sgplot data=mysales8 ; 
+	vbox sales ; 
+	run ;
+
+proc univariate data=mysales8; by invoiceno ; 
+	var sales ;
+	run ;
+proc sgplot data=mysales8 ;
+	vbox sales ; 
+	run ;
+
+/* 3.2. Find the outliers of customers by the total sales per customer. */
+
+proc sort data=mysales out=mysales7 ; 
+	by customerID ;
+	run ; 
+proc univariate data=mysales7 ; 
+	var sales customerID; 
+	run ;
+proc sgplot data=mysales7 ; 
+	vbox sales/group=customerID; 
+	run ; 
+
+/* 4.1. The Probability that a purchase was made by a customer from UK */
+/* 4.2. The probability that a purchase was made in the 1th quarter */
+/* 4.3. The probability that a purchase was made in the 1th quarter 
+among the UK customers. */  
+/* 4.4. The probability that a purchase was made by a non-UK customer in 
+the 1th quarter. */
+
+proc freq data=mysales ;
+	tables UK*quarter;
+	run ; 
+
+/* 5.1. The average total sales between UK customers and Non-UK customers are same. */
+
+proc ttest data=mysales sides=2 alpha=0.05 h0=0;
+	class UK;
+	var sales;
+	run ;
+
+/* 5.2. ANOVA analysis of total sales by quarter */
+
+proc anova data=mysales ;
+	class quarter ;
+	model sales = quarter  ;
+	means quarter / BON ; 
+	run ;

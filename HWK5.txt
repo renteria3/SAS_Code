@@ -1,0 +1,215 @@
+/* ECO520 Homework 5
+Regression Analysis on Airbnb Price in Chicago
+
+I.	Airbnb Price in Chicago (Sample Data)*/
+
+
+filename webdat url "http://bigblue.depaul.edu/jlee141/econdata/eco520/airbnb2019.csv" ;
+
+/* Import Chicago Community data*/
+PROC IMPORT OUT= airbnb0 DATAFILE= webdat DBMS=CSV REPLACE;
+     GETNAMES=YES;   DATAROW=2; 
+RUN;
+proc contents ; run ;
+
+/* Create your own random sample data. Make sure type your student ID as seed number Replace your_depaul_id with your student id (only numbers)      */
+
+proc surveyselect data= airbnb0 method=srs seed = 1403278
+     n = 1000 out=airbnb1 ;
+run;
+
+/* The following code will create the class of host */
+data airbnb2 ; set airbnb1 ;
+    if      0 <   host_total_listings  < 2  then hostclass = 1  ; 
+    else if 2 <= host_total_listings   < 50 then hostclass = 2  ; 
+    else if host_total_listings   >=     50 then hostclass = 3  ;
+    SQR_BEDROOMS=BEDROOMS**2 ; 
+	SQR_BEDS=BEDS**2 ;
+	SQR_BATHROOMS=BATHROOMS**2 ; 
+	LOG_PRICEPERNIGHT= LOG(PRICEPERNIGHT) ; 
+	LOG_MINIMUM_NIGHTS = LOG(MINIMUM_NIGHTS) ; RUN ;
+     /* More variables you would create */
+
+proc means ; run ; 
+
+/*1.	Using the selected data, find any outliers or missing cases on all variables. If necessary, 
+remove the outliers or any missing cases. */
+
+/*2.	Use scatter plots to find potential variables to have nonlinear relationship with price. 
+Create the square of rooms, the square of beds, and the square of bathrooms. If necessary, create 
+some squared variables or logarithmic variables to analyze the potential nonlinear relationships.*/  
+
+PROC CORR DATA=AIRBNB2 ; 
+	VAR LOG_PRICEPERNIGHT LISTINGMONTH ACCOMMODATES SQR_BEDROOMS SQR_BEDS SQR_BATHROOMS GUESTS_INCLUDED  
+	LOG_MINIMUM_NIGHTS NUMBER_OF_REVIEWS REVIEW_SCORES_RATING REVIEWS_PER_MONTH HOSTCLASS; RUN ; 
+
+PROC UNIVARIATE DATA= AIRBNB2 PLOT;
+	VAR LOG_PRICEPERNIGHT ; RUN ; 
+
+proc sgscatter data = AIRBNB2;
+	plot LOG_PRICEPERNIGHT*(LISTINGMONTH ACCOMMODATES SQR_BEDROOMS SQR_BEDS SQR_BATHROOMS GUESTS_INCLUDED 
+	LOG_MINIMUM_NIGHTS NUMBER_OF_REVIEWS REVIEW_SCORES_RATING REVIEWS_PER_MONTH HOSTCLASS); run;
+
+/*3.	Clustering analysis on reviews of property units */
+/*3.1)	Find the hierarchical and non-hierarchical clustering models for the three variables related 
+to the reviews (number_of_reviews, review_scores_rating, and reviews_per_month). */
+
+/* HIEARARCHICAL MODEL */
+PROC CLUSTER DATA=AIRBNB2 OUT=HI_AIRBNB METHOD=WARD CCC PSEUDO PRINT=7 ;
+	VAR NUMBER_OF_REVIEWS REVIEW_SCORES_RATING REVIEWS_PER_MONTH ; 
+	COPY LOG_PRICEPERNIGHT ACCOMMODATES HOSTCLASS LISTINGMONTH SQR_BEDROOMS SQR_BEDS SQR_BATHROOMS GUESTS_INCLUDED LOG_MINIMUM_NIGHTS; RUN ; 
+PROC PRINT DATA=HI_AIRBNB ; RUN ;
+
+PROC TREE DATA=HI_AIRBNB OUT=TREE_AIRBNB NCL=3;
+	COPY LOG_PRICEPERNIGHT LISTINGMONTH ACCOMMODATES SQR_BEDROOMS SQR_BEDS SQR_BATHROOMS GUESTS_INCLUDED  
+	LOG_MINIMUM_NIGHTS NUMBER_OF_REVIEWS REVIEW_SCORES_RATING REVIEWS_PER_MONTH HOSTCLASS ; RUN ;
+PROC PRINT DATA=TREE_AIRBNB ; RUN ;
+
+PROC SGPLOT DATA=TREE_AIRBNB;
+	SCATTER X=NUMBER_OF_REVIEWS Y=REVIEW_SCORES_RATING / GROUP=CLUSTER  ; 
+	REG X=NUMBER_OF_REVIEWS Y=REVIEW_SCORES_RATING / GROUP=CLUSTER ; RUN ;
+PROC SGPLOT DATA=TREE_AIRBNB;
+	SCATTER X=NUMBER_OF_REVIEWS Y=REVIEWS_PER_MONTH / GROUP=CLUSTER  ; 
+	REG X=NUMBER_OF_REVIEWS Y=REVIEWS_PER_MONTH / GROUP=CLUSTER ; RUN ;
+
+
+/* NON-HIEARARCHICAL - K-MEANS MODEL */
+PROC FASTCLUS DATA=AIRBNB2 MAXCLUSTERS=3 OUT=KMEAN_AIRBNB ;
+	VAR NUMBER_OF_REVIEWS REVIEW_SCORES_RATING REVIEWS_PER_MONTH LOG_PRICEPERNIGHT ACCOMMODATES HOSTCLASS ; RUN ;
+
+PROC SGPLOT DATA=KMEAN_AIRBNB ;
+	SCATTER X=NUMBER_OF_REVIEWS Y=REVIEW_SCORES_RATING / GROUP=CLUSTER  ; 
+	REG X=NUMBER_OF_REVIEWS Y=REVIEW_SCORES_RATING / GROUP=CLUSTER ; RUN ;
+PROC SGPLOT DATA=KMEAN_AIRBNB ;
+	SCATTER X=NUMBER_OF_REVIEWS Y=REVIEWS_PER_MONTH / GROUP=CLUSTER  ; 
+	REG X=NUMBER_OF_REVIEWS Y=REVIEWS_PER_MONTH / GROUP=CLUSTER ; RUN ;
+
+/*3.2)	Since the cluster variable is a categorical variables, you need to create a dummy variable 
+to each cluster to be used in a regression model. Create appropriate dummy variables, and estimate 
+the following regression model with the cluster dummy variables you created. */
+
+DATA AIRBNB2 ; SET TREE_AIRBNB ; 
+	IF CLUSTER = 1 THEN DUM1 = 1 ; ELSE DUM1 = 0 ; 
+	IF CLUSTER = 2 THEN DUM2 = 2 ; ELSE DUM2 = 0 ; 
+	IF CLUSTER = 3 THEN DUM3 = 3 ; ELSE DUM3 = 0 ;
+	RUN ; 
+
+proc reg data=Airbnb2 ;
+   model LOG_pricepernight = accommodates DUM1-DUM3 ;  run ;
+   
+PROC GLM DATA=airbnb2 ; 
+	CLASS CLUSTER ;
+	MODEL LOG_pricepernight = accommodates CLUSTER ACCOMMODATES*CLUSTER / SOLUTION ; RUN ; 
+
+/*3.3)	According to the regression model in 2) which cluster group(s) is(are) significant to the 
+price per night?*/
+
+/*3.4)	Suppose you are a marketing manager at Airbnb, which group(cluster) might be a targeted group
+ for the highest or lowest price of the rents? */
+
+  
+/*4.	From the models in 3, we want to consider if the hostclass influences the price along with 
+the accommodates. Estimate the appropriate model and explain if the hostclass is a significant variable 
+to the price.*/  
+
+DATA AIRBNB3 ; SET TREE_AIRBNB ; 
+	IF HOSTCLASS = 1 THEN DUM1 = 1 ; ELSE DUM1 = 0 ; 
+	IF HOSTCLASS = 2 THEN DUM2 = 2 ; ELSE DUM2 = 0 ; 
+	IF HOSTCLASS = 3 THEN DUM3 = 3 ; ELSE DUM3 = 0 ;
+	RUN ; 
+
+proc reg data=Airbnb2 ;
+   model LOG_pricepernight = accommodates DUM1-DUM3 ;  run ;
+   
+PROC GLM DATA=airbnb2 ; 
+	CLASS HOSTCLASS ;
+	MODEL LOG_pricepernight = accommodates HOSTCLASS ACCOMMODATES*HOSTCLASS / SOLUTION ; RUN ; 
+
+ 
+ /*5.	Machine Learning using Regression Analysis:
+Let’s consider to create regression models using training data set and save the estimated models and 
+predict the prices using the rest of testing data. (Use the example we covered in the ppt slides).*/ 
+
+/*5.1)	Split the Airbnb2 data to 70% as training data and 30% as testing (validating) data with a seed 
+number as 123456. Estimate regression models as the dependent variable of PricePerNight using only the 
+training data with the following options.   
+1.	Adjusted R square 
+2.	Stepwise
+3.	Your own model different from 1) and 2) */  
+
+PROC SORT DATA = AIRBNB2 ; 
+	BY LOG_PRICEPERNIGHT ; RUN ;
+
+proc surveyselect data= AIRBNB2  method=srs seed=123456 outall samprate=0.7 out= AIRBNB_SUBSET;
+	strata LOG_PRICEPERNIGHT ; RUN ; 
+
+proc freq data=AIRBNB_SUBSET; tables selected ; RUN ;
+  
+/* Values of selected variable: 1 means selected for training set, 0 means testing set*/
+data training;
+   set AIRBNB_SUBSET;
+       Y = LOG_PRICEPERNIGHT  ;
+   if selected=0 then Y = . ;  run ;
+   
+%let indep_var = LISTINGMONTH ACCOMMODATES SQR_BEDROOMS SQR_BEDS SQR_BATHROOMS GUESTS_INCLUDED LOG_MINIMUM_NIGHTS 
+	NUMBER_OF_REVIEWS REVIEW_SCORES_RATING REVIEWS_PER_MONTH HOSTCLASS ;
+
+proc reg data=training ;
+	model y = ACCOMMODATES SQR_BEDROOMS GUESTS_INCLUDED ;   output out=r1(where=(y=.)) p=yhat1 ; 
+	model y = &indep_var                            ;   output out=r2(where=(y=.)) p=yhat2 ; 
+	model y = &indep_var  / selection=stepwise      ;   output out=r3(where=(y=.)) p=yhat3 ; 
+	model y = &indep_var  / selection=adjrsq        ;   output out=r4(where=(y=.)) p=yhat4 ; 
+	run ;
+
+/*5.2)	Perform the out of sample prediction for the observations using only the testing data. Find the following statistics and compare the results. Which model is the best in terms of the following statistics?
+1.	MSE (mean square error) 
+2.	RMSE (root mean square error) 
+3.	MPE (mean percentage error) 
+4.	MAE (mean absolute error)*/
+
+data allr ; merge r1 r2 r3 r4 ; 
+  yorg = LOG_PRICEPERNIGHT  ;
+  e1 = yorg - yhat1 ;
+  e2 = yorg - yhat2 ;
+  e3 = yorg - yhat3 ;
+  e4 = yorg - yhat4 ;
+  rmse1 = ((e1)**2)**0.5 ; 
+  rmse2 = ((e2)**2)**0.5 ; 
+  rmse3 = ((e3)**2)**0.5 ; 
+  rmse4 = ((e4)**2)**0.5 ; 
+  mse1 = (e1)**2 ; 
+  mse2 = (e2)**2 ; 
+  mse3 = (e3)**2 ; 
+  mse4 = (e4)**2 ; 
+  mae1 = abs(e1) ; 
+  mae2 = abs(e2) ; 
+  mae3 = abs(e3) ; 
+  mae4 = abs(e4) ; 
+  mpe1 = abs((e1)/yorg) ; 
+  mpe2 = abs((e2)/yorg) ; 
+  mpe3 = abs((e3)/yorg) ; 
+  mpe4 = abs((e4)/yorg) ; 
+run ;
+
+proc means n mean data=allr maxdec=4 ; var rmse: mse: mae: mpe:  ;  run ;
+
+ods layout gridded columns=2 ;
+ods region ;
+proc sgplot data=allr ; title "Regression with some variables" ; 
+  scatter x=yorg y=yhat1 ;
+  run ;
+ods region ;
+proc sgplot data=allr ; title "Regression with all variables" ; 
+  scatter x=yorg y=yhat2 ;
+  run ;
+ods region ;
+proc sgplot data=allr ; title "Regression with stepwise" ; 
+  scatter x=yorg y=yhat3 ;
+  run ;
+ods region ;
+proc sgplot data=allr ; title "Regression with adjrsq " ; 
+  scatter x=yorg y=yhat3 ;
+  run ;
+ods layout end;
+
+
